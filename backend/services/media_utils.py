@@ -20,8 +20,8 @@ def _frame_to_jpeg(frame) -> Optional[bytes]:
     try:
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         pil = Image.fromarray(rgb)
-        # Resize to max 768px on longest side for storyboard (smaller = faster)
-        max_size = 768
+        # Resize to max 512px on longest side for storyboard (Smaller = Much Faster on Render)
+        max_size = 512
         if max(pil.size) > max_size:
             ratio = max_size / max(pil.size)
             pil = pil.resize((int(pil.width * ratio), int(pil.height * ratio)), Image.LANCZOS)

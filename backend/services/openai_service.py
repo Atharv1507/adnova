@@ -28,19 +28,24 @@ def _extract_json(text: str) -> dict:
             pass
     return {}
 
-
 async def transcribe_video(video_bytes: bytes, filename: str = "video.mp4") -> str:
     """
     Transcribe audio from a video file using OpenAI Whisper.
     Returns the transcript text, or empty string if failed.
     """
+    # Guard against OpenAI's 25MB file size limit for Whisper
+    if len(video_bytes) > 25 * 1024 * 1024:
+        print(f"Skipping Whisper: Video file too large ({len(video_bytes) / 1024 / 1024:.1f}MB)")
+        return "Video too large for transcription (>25MB). Analysis based on visual cues only."
+
     try:
         file_tuple = (filename, io.BytesIO(video_bytes), "video/mp4")
         response = await client.audio.transcriptions.create(
             model="whisper-1",
             file=file_tuple,
             language="hi",          # Hint Hindi first (handles Hinglish well)
-            response_format="text"
+            response_format="text",
+            timeout=60.0            # 60s timeout for audio
         )
         transcript = str(response).strip()
         print(f"Whisper transcript: {transcript[:200]}")
