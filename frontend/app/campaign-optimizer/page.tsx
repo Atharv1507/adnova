@@ -118,8 +118,9 @@ export default function CampaignOptimizer() {
       const data = await res.json();
       setResult(data);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to connect to backend.";
-      setError(msg);
+      console.error("Fetch error:", err);
+      const msg = err instanceof Error ? err.message : "Connection failed (v2)";
+      setError(`[Deployment v2] ${msg}`);
     } finally {
       setLoading(false);
     }
