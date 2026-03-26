@@ -9,6 +9,7 @@ from typing import Optional
 
 import cv2
 from PIL import Image
+import subprocess
 
 
 def encode_image_to_base64(image_bytes: bytes) -> str:
@@ -118,6 +119,49 @@ def extract_single_frame(video_bytes: bytes) -> Optional[bytes]:
                 os.unlink(tmp_path)
             except Exception:
                 pass
+
+
+def extract_audio(video_bytes: bytes) -> Optional[bytes]:
+    """
+    Extract audio from video bytes as a small MP3 using ffmpeg.
+    This is much more bandwidth/memory efficient than sending a full video to Whisper.
+    """
+    tmp_v = None
+    tmp_a = None
+    try:
+        # Create temp files
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as v:
+            v.write(video_bytes)
+            tmp_v = v.name
+        
+        tmp_a = tmp_v.replace(".mp4", ".mp3")
+
+        # Run ffmpeg to extract audio (mono, 64k bitrate for efficiency)
+        # -y: overwrite, -vn: no video, -ac 1: mono, -ar 16000: 16kHz
+        cmd = [
+            "ffmpeg", "-y", "-i", tmp_v, 
+            "-vn", "-acodec", "libmp3lame", "-ac", "1", "-ar", "16000", "-b:a", "64k", 
+            tmp_a
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            print(f"FFmpeg audio extraction failed: {result.stderr}")
+            return None
+
+        if os.path.exists(tmp_a):
+            with open(tmp_a, "rb") as a:
+                return a.read()
+                
+    except Exception as e:
+        print(f"Audio extraction error: {e}")
+    finally:
+        for p in [tmp_v, tmp_a]:
+            if p and os.path.exists(p):
+                try: os.unlink(p)
+                except: pass
+
+    return None
 
 
 def process_uploaded_file(file_bytes: bytes, content_type: str) -> Optional[bytes]:

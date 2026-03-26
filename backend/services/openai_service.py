@@ -31,39 +31,33 @@ def _extract_json(text: str) -> dict:
 async def transcribe_video(video_bytes: bytes, filename: str = "video.mp4") -> str:
     """
     Transcribe audio from a video file using OpenAI Whisper.
-    Returns the transcript text, or empty string if failed.
+    Extracts a small audio track first for efficiency.
     """
-    # Guard against OpenAI's 25MB file size limit for Whisper
-    if len(video_bytes) > 25 * 1024 * 1024:
-        print(f"Skipping Whisper: Video file too large ({len(video_bytes) / 1024 / 1024:.1f}MB)")
-        return "Video too large for transcription (>25MB). Analysis based on visual cues only."
+    from services.media_utils import extract_audio
+    
+    audio_bytes = extract_audio(video_bytes)
+    if not audio_bytes:
+        print("Falling back to sending full video for transcription (extract_audio failed or ffmpeg missing)")
+        audio_to_send = video_bytes
+        ext = "mp4"
+    else:
+        audio_to_send = audio_bytes
+        ext = "mp3"
 
     try:
-        file_tuple = (filename, io.BytesIO(video_bytes), "video/mp4")
+        file_tuple = (filename.replace(".mp4", f".{ext}"), io.BytesIO(audio_to_send), f"audio/{ext}")
         response = await client.audio.transcriptions.create(
             model="whisper-1",
             file=file_tuple,
             language="hi",          # Hint Hindi first (handles Hinglish well)
             response_format="text",
-            timeout=60.0            # 60s timeout for audio
+            timeout=60.0
         )
-        transcript = str(response).strip()
-        print(f"Whisper transcript: {transcript[:200]}")
-        return transcript
+        return str(response).strip()
     except Exception as e:
         print(f"Whisper transcription error: {e}")
-        # Try again with auto language detection
-        try:
-            file_tuple = (filename, io.BytesIO(video_bytes), "video/mp4")
-            response = await client.audio.transcriptions.create(
-                model="whisper-1",
-                file=file_tuple,
-                response_format="text"
-            )
-            return str(response).strip()
-        except Exception as e2:
-            print(f"Whisper retry error: {e2}")
-            return ""
+        return ""
+
 
 
 def _build_vision_messages(frame_b64_list: list[str], prompt: str) -> list:
