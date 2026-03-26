@@ -141,7 +141,7 @@ export default function BusinessMetrics() {
   const fmtNum = (n: number, d = 2) => n.toFixed(d);
 
   // Prepare chart data for Unit Economics if result exists
-  let unitData = [];
+  let unitData: { name: string; value: number; fill: string }[] = [];
   if (result) {
     const profitPerUnit = result.metrics.selling_price - result.metrics.cost_price - result.metrics.cpa;
     unitData = [
