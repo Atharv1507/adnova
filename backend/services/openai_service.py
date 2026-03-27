@@ -69,10 +69,14 @@ async def transcribe_video(video_bytes: bytes, filename: str = "video.mp4") -> s
 
 
 
-def _build_vision_messages(frame_b64_list: list[str], prompt: str) -> list:
-    """Build multi-image message for GPT-4o storyboard analysis."""
-    content = []
+def _build_vision_messages(frame_b64_list: list[str], user_prompt: str, system_prompt: str = "") -> list:
+    """Build multi-image message for GPT-4o storyboard analysis with optional system persona."""
+    messages = []
+    
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
 
+    content = []
     if len(frame_b64_list) == 1:
         content.append({
             "type": "image_url",
@@ -89,8 +93,9 @@ def _build_vision_messages(frame_b64_list: list[str], prompt: str) -> list:
                 "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "high"}
             })
 
-    content.append({"type": "text", "text": prompt})
-    return [{"role": "user", "content": content}]
+    content.append({"type": "text", "text": user_prompt})
+    messages.append({"role": "user", "content": content})
+    return messages
 
 
 async def analyze_creative_for_targeting(
@@ -106,9 +111,11 @@ async def analyze_creative_for_targeting(
     media_context = "video ad storyboard (4 frames shown)" if is_video and len(frame_b64_list) > 1 else "image ad creative"
     transcript_section = f"\nVIDEO TRANSCRIPT (from Whisper):\n\"{transcript}\"\n" if transcript else "\n(No audio transcript available — image upload or silent video)\n"
 
-    prompt = f"""You are a senior Meta Ads strategist and creative director with deep expertise in the Indian D2C market. You have direct access to the entire Meta Ads Marketing API database in your mind.
-You are analyzing a {media_context} for a brand running Facebook/Instagram ads in India.{transcript_section}
+    system_prompt = """You are a senior Meta Ads strategist and creative director with deep expertise in the Indian D2C market. You have direct access to the entire Meta Ads Marketing API database in your mind.
+You provide professional, brutally honest, and specific analysis. All output MUST be in valid JSON format."""
 
+    user_prompt = f"""You are analyzing a {media_context} for a brand running Facebook/Instagram ads in India. {transcript_section}
+    
 YOUR TASK:
 First, deeply understand WHAT is happening in this ad and WHO it is speaking to. Do not just look at surface-level objects. Analyze the story, the emotional hook, the implicit pain points being solved, and the cultural context. 
 
@@ -228,7 +235,7 @@ Return ONLY a valid JSON object with this EXACT structure:
 Be brutally honest. Specific. Reference what you actually see/hear. Do not output anything outside the JSON boundaries. Return ONLY valid JSON."""
 
     try:
-        messages = _build_vision_messages(frame_b64_list, prompt)
+        messages = _build_vision_messages(frame_b64_list, user_prompt, system_prompt)
         response = await client.chat.completions.create(
             model="gpt-4o",
             messages=messages,
@@ -253,13 +260,16 @@ async def analyze_creative_performance(image_b64: str, metrics_context: dict) ->
     """
     metrics_str = json.dumps(metrics_context, indent=2)
 
-    prompt = f"""You are a senior Meta Ads strategist specializing in Indian D2C e-commerce.
-You are reviewing an ad creative alongside its REAL campaign performance data.
+    system_prompt = """You are a senior Meta Ads strategist specializing in Indian D2C e-commerce.
+You review real campaign performance data alongside ad creatives.
+Your analysis must be professional, data-driven, and returned ONLY as a valid JSON object."""
 
+    user_prompt = f"""Analyze WHY this creative drove the specific results shown below.
+    
 CAMPAIGN PERFORMANCE:
 {metrics_str}
 
-TASK: Analyze WHY this creative drove the specific results shown. Be specific about:
+TASK: Be specific about:
 - Which exact visual elements likely drove conversions (or hurt them)
 - How the ROAS of {metrics_context.get('roas', 'N/A')}x compares to what this creative deserves
 - What to test next based on what you actually see
@@ -291,13 +301,16 @@ Return ONLY valid JSON."""
     try:
         response = await client.chat.completions.create(
             model="gpt-4o",
-            messages=[{
-                "role": "user",
-                "content": [
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}", "detail": "high"}},
-                    {"type": "text", "text": prompt}
-                ]
-            }],
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}", "detail": "high"}},
+                        {"type": "text", "text": user_prompt}
+                    ]
+                }
+            ],
             max_tokens=1400,
             temperature=0.3
         )
